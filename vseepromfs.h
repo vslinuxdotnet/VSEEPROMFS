@@ -1,19 +1,56 @@
 /*
-Some Simple FileSytem Library to work with internal EEPROM's
-Supports Format,Read,Write,Delete,List Files
-All directory are virtual and part of filename.
-The space will be divided in slots, if some file was deleted, that slot becomes disabled, then if new file can get in the free space the slot is reused.
+This is some simple fileSytem library to work with internal EEPROM's using EEPROM.h lib from arduino
+Supports Format,Read,Write,Delete,List Files and others
+All directory are virtual and part of the filename.
+The eeprom space will be divided in slots, if some file was deleted, that slot becomes disabled
+If new file will be created, checks if that file can get in some free space, yes then the slot is reused, if not new slot created
+In format os init, first it alloc space to file names MAX_FILES*NAME_SIZE, then all remain free space are data
 
-VSEEPROMFS V0.3
+https://github.com/vslinuxdotnet/VSEEPROMFS
+
+VSEEPROMFS V0.5
+By Vasco Santos 2026
 */
+
+
+/*
+Some example!!!!
+
+#include "vseepromfs.h"
+
+VSEEPROMFS fs2;
+
+void setup() {
+
+  Serial.begin(9600);
+  fs2.begin();
+
+  char meuBuffer[64];
+  if (fs2.readFile("ver.txt", meuBuffer, sizeof(meuBuffer))) {
+    Serial.println(meuBuffer);
+  }else{
+    fs2.writeFile("ver.txt", "FS EEPROM v1.0");
+  }
+
+  if (!fs2.exists("/sys/version.txt"))
+    fs2.writeFile("/sys/version.txt", "0.4");
+
+
+  fs2.listAllFiles();
+  
+  fs2.hexdump();
+  
+  }
+*/
+
 #include <Arduino.h>
 #include <EEPROM.h>
 
-#define MAX_FILES 10 //max files
-#define NAME_SIZE 16 //max file name
-#define EEPROM_SIZE 1024 //max size of internal eeprom
+#define MAX_FILES 15 //max files
+#define NAME_SIZE 20 //max file name
+//#define EEPROM_SIZE (int) EEPROM.length() //1024 //max size of internal eeprom
 #define MAGIC_BYTE_ADDR 0 //address if magic value
-#define MAGIC_VALUE 0x55 //format ok magic value
+#define MAGIC_VALUE 0x2A //format ok magic value
 
 struct FileEntry {
   char name[NAME_SIZE];
@@ -22,11 +59,13 @@ struct FileEntry {
   bool active;
 };
 
+
 class VSEEPROMFS {
   
 private:
   int nextAddress;
   const int TABLE_START = 1;
+  int EEPROM_SIZE = (int) EEPROM.length();
 
 public:
   VSEEPROMFS() {
@@ -56,6 +95,7 @@ public:
   }
   
   void format() {
+    Serial.println(F("EEPROM Formating..."));
     for (int i = 0; i < EEPROM_SIZE; i++) EEPROM.write(i, 0);
     
      EEPROM.write(MAGIC_BYTE_ADDR, MAGIC_VALUE);//save signature after format
@@ -317,6 +357,56 @@ bool isDirectory(const char* path) {
   }
   
   return false;
+}
+
+void hexdump() {
+  
+  Serial.println(F("\n--- EEPROM HEXDUMP ---"));
+  // Serial.println(F("Addr      0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F  |ASCII|"));
+  Serial.println(F("------------------------------------------------------------------------"));
+
+  for (int i = 0; i < EEPROM_SIZE; i += 16) {
+    // print adress Hex (Ex: 0000, 0010...)
+    if (i < 0x100) Serial.print('0');
+    if (i < 0x10)  Serial.print('0');
+    Serial.print(i, HEX);
+    Serial.print(F("  "));
+
+    char asciiBuffer[17]; // Buffer for ASCII
+    asciiBuffer[16] = '\0';
+
+    //first 16 bytes of line in hex
+    for (int j = 0; j < 16; j++) {
+      int addr = i + j;
+      if (addr < EEPROM_SIZE) {
+        byte val = EEPROM.read(addr);
+        
+        if (val < 0x10) Serial.print('0');
+        Serial.print(val, HEX);
+        Serial.print(' ');
+
+        // save ASCII colum
+        if (val >= 32 && val <= 126) {
+          asciiBuffer[j] = (char)val;
+        } else {
+          asciiBuffer[j] = '.'; // hidden chars!
+        }
+      } else {
+        // if no multiple of 16, write some spaces
+        Serial.print(F("   "));
+        asciiBuffer[j] = ' ';
+      }
+    }
+
+    // print ASCII colum
+    Serial.print(F(" |"));
+    Serial.print(asciiBuffer);
+    Serial.println('|');
+    
+    // little break to buffer dont frezes serial at low rate
+    if (i % 128 == 0) delay(10);
+  }
+  Serial.println(F("------------------------------------------------------------------------"));
 }
 
 };
