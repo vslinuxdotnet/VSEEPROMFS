@@ -184,8 +184,41 @@ public:
       Serial.println(F("No free EEPROM!"));
       return false;
     }
-    
     return writeFile(name, content);
   }
+
+//get disable slots count
+int getFreeSlotsCount() {
+  if (!isFormatted()) return 0;
+  
+  int count = 0;
+  for (int i = 0; i < MAX_FILES; i++) {
+    FileEntry entry;
+    EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
+    
+    if (!entry.active) {
+      count++;
+    }
+  }
+  return count;
+}
+
+void listFreeSlotIndexes() {
+  if (!isFormatted()) return;
+  
+  Serial.print(F("Free Slots: "));
+  bool first = true;
+  for (int i = 0; i < MAX_FILES; i++) {
+    FileEntry entry;
+    EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
+    
+    if (!entry.active) {
+      if (!first) Serial.print(F(", "));
+      Serial.print(i);
+      first = false;
+    }
+  }
+  Serial.println();
+}
 
 };
