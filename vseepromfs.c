@@ -2,10 +2,11 @@
 Some Simple FileSytem Library to work with internal EEPROM's
 Supports Format,Read,Write,Delete,List Files
 All directory are virtual and part of filename.
-The space will be divided in slots, if some file was deleted the slot becomes disabled (needs optimize)
+The space will be divided in slots, if some file was deleted, that slot becomes disabled, then if new file can get it the free space the slot is reused.
 
-VSEEPROMFS V0.1
+VSEEPROMFS V0.2
 */
+#include <Arduino.h>
 
 #define MAX_FILES 10 //max files
 #define NAME_SIZE 16 //max file name
@@ -53,8 +54,73 @@ public:
      nextAddress = TABLE_START + (sizeof(FileEntry) * MAX_FILES);
      Serial.println(F("EEPROM Formated."));
   }
+
+bool writeFile(const char* name, const char* content) {
+  if (!isFormatted()) return false;
   
-  bool writeFile(const char* name, const char* content) {
+  int sizeNeeded = strlen(content);
+  int slotToUse = -1;
+  int targetAddr = -1;
+
+  //find disabled slot that can handle the space
+  for (int i = 0; i < MAX_FILES; i++) {
+    FileEntry entry;
+    EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
+    
+    // if slot is disabled and size get into the old space slot
+    if (!entry.active && entry.fileSize >= sizeNeeded && entry.startAddress > 0) {
+      slotToUse = i;
+      targetAddr = entry.startAddress;
+      Serial.print(F("FS: Reutilizando slot ")); Serial.println(i);
+      break; 
+    }
+  }
+
+  // if not found a disabled slot get next free slot
+  if (slotToUse == -1) {
+    // check is free space exists
+    if (freeSpace() < sizeNeeded) {
+      Serial.println(F("Error, no free space avaliable!"));
+      return false;
+    }
+    
+    // get the first free slot
+    for (int i = 0; i < MAX_FILES; i++) {
+      FileEntry entry;
+      EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
+      if (!entry.active) {
+        slotToUse = i;
+        targetAddr = nextAddress;
+        nextAddress += sizeNeeded;
+        break;
+      }
+    }
+  }
+
+  // save data in new or old slot
+  if (slotToUse != -1) {
+    FileEntry newFile;
+    memset(newFile.name, 0, NAME_SIZE);
+    strncpy(newFile.name, name, NAME_SIZE - 1);
+    newFile.startAddress = targetAddr;
+    newFile.fileSize = sizeNeeded;
+    newFile.active = true;
+
+    // save data
+    for (int j = 0; j < sizeNeeded; j++) {
+      EEPROM.write(targetAddr + j, content[j]);
+    }
+
+    //update table
+    EEPROM.put(TABLE_START + (slotToUse * sizeof(FileEntry)), newFile);
+    return true;
+  }
+
+  Serial.println(F("Error table Full!"));
+  return false;
+}
+  
+  bool writeFileold(const char* name, const char* content) {
     if (!isFormatted()) return false;
     
     int size = strlen(content);
@@ -119,18 +185,20 @@ public:
     return false;
   }
 
-  void deleteFile(const char* name) {
-    for (int i = 0; i < MAX_FILES; i++) {
-      FileEntry entry;
-      EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
-      if (entry.active && strcmp(entry.name, name) == 0) {
-        entry.active = false; // mark as inactive slot 
-        EEPROM.put(TABLE_START + ( i * sizeof(FileEntry)), entry);
-        Serial.print(F("Eliminado: ")); Serial.println(name);
-        return;
-      }
+bool deleteFile(const char* name) {
+  for (int i = 0; i < MAX_FILES; i++) {
+    FileEntry entry;
+    EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
+    
+    if (entry.active && strcmp(entry.name, name) == 0) {
+      entry.active = false; // mark as inactive slot
+      EEPROM.put(TABLE_START + (i * sizeof(FileEntry)), entry);
+      Serial.print(F("File deleted: ")); Serial.println(name);
+      return true;
     }
   }
+  return false;
+}
 
  void listAllFiles() {
     if (!isFormatted()) return;
