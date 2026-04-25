@@ -4,11 +4,11 @@ Supports Format,Read,Write,Delete,List Files and others
 All directory are virtual and part of the filename.
 The eeprom space will be divided in slots, if some file was deleted, that slot becomes disabled
 If new file will be created, checks if that file can get in some free space, yes then the slot is reused, if not new slot created
-In format os init, first it alloc space to file names MAX_FILES*NAME_SIZE, then all remain free space are data
+In format os init, first it alloc space to file names FSFSMAX_FILES*FSFSNAME_SIZE, then all remain free space are data
 
 https://github.com/vslinuxdotnet/VSEEPROMFS
 
-VSEEPROMFS V0.5
+VSEEPROMFS V0.6
 By Vasco Santos 2026
 */
 
@@ -46,38 +46,41 @@ void setup() {
 #include <Arduino.h>
 #include <EEPROM.h>
 
-#define MAX_FILES 15 //max files
-#define NAME_SIZE 20 //max file name
-//#define EEPROM_SIZE (int) EEPROM.length() //1024 //max size of internal eeprom
-#define MAGIC_BYTE_ADDR 0 //address if magic value
-#define MAGIC_VALUE 0x2A //format ok magic value
+#define FS_NAME_SIZE 20 //max file name len
+#define FS_MAX_FILES 15 //max files
 
-struct FileEntry {
-  char name[NAME_SIZE];
+class VSEEPROMFS {
+
+public:
+  struct FileEntry {
+  char name[FS_NAME_SIZE];
   int startAddress;
   int fileSize;
   bool active;
 };
 
-
-class VSEEPROMFS {
-  
 private:
   int nextAddress;
   const int TABLE_START = 1;
   int EEPROM_SIZE = (int) EEPROM.length();
+  int FSMAX_FILES = FS_MAX_FILES; //max files
+  int FSNAME_SIZE = FS_NAME_SIZE; //max file name len
+  byte MAGIC_BYTE_ADDR = 0; //address if magic value
+  byte MAGIC_VALUE = 0x2A; //format ok magic value
+
 
 public:
   VSEEPROMFS() {
-    nextAddress = TABLE_START + (sizeof(FileEntry) * MAX_FILES);
+    nextAddress = TABLE_START + (sizeof(FileEntry) * FSMAX_FILES);
   }
+
   
-  void begin() {
+  void begin(void) {
     if (!isFormatted()) format();
   
      //next slot free, search all slots
-      int lastReserved = TABLE_START + (sizeof(FileEntry) * MAX_FILES);
-      for (int i = 0; i < MAX_FILES; i++) {
+      int lastReserved = TABLE_START + (sizeof(FileEntry) * FSMAX_FILES);
+      for (int i = 0; i < FSMAX_FILES; i++) {
         FileEntry entry;
         EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
         if (entry.active) {
@@ -90,16 +93,16 @@ public:
         //Serial.println(nextAddress);
   }
 
-  bool isFormatted() {
+  bool isFormatted(void) {
       return EEPROM.read(MAGIC_BYTE_ADDR) == MAGIC_VALUE;
   }
   
-  void format() {
+  void format(void) {
     Serial.println(F("EEPROM Formating..."));
     for (int i = 0; i < EEPROM_SIZE; i++) EEPROM.write(i, 0);
     
      EEPROM.write(MAGIC_BYTE_ADDR, MAGIC_VALUE);//save signature after format
-     nextAddress = TABLE_START + (sizeof(FileEntry) * MAX_FILES);
+     nextAddress = TABLE_START + (sizeof(FileEntry) * FSMAX_FILES);
      Serial.println(F("EEPROM Formated!"));
   }
 
@@ -111,7 +114,7 @@ bool writeFile(const char* name, const char* content) {
   int targetAddr = -1;
 
   //find disabled slot that can handle the space
-  for (int i = 0; i < MAX_FILES; i++) {
+  for (int i = 0; i < FSMAX_FILES; i++) {
     FileEntry entry;
     EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
     
@@ -133,7 +136,7 @@ bool writeFile(const char* name, const char* content) {
     }
     
     // get the first free slot
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < FSMAX_FILES; i++) {
       FileEntry entry;
       EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
       if (!entry.active) {
@@ -148,8 +151,8 @@ bool writeFile(const char* name, const char* content) {
   // save data in new or old slot
   if (slotToUse != -1) {
     FileEntry newFile;
-    memset(newFile.name, 0, NAME_SIZE);
-    strncpy(newFile.name, name, NAME_SIZE - 1);
+    memset(newFile.name, 0, FSNAME_SIZE);
+    strncpy(newFile.name, name, FSNAME_SIZE - 1);
     newFile.startAddress = targetAddr;
     newFile.fileSize = sizeNeeded;
     newFile.active = true;
@@ -176,7 +179,7 @@ bool writeFile(const char* name, const char* content) {
     FileEntry temp;
 
     // find if free slot exists
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < FSMAX_FILES; i++) {
       EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), temp);
       if (temp.active && strcmp(temp.name, name) == 0) {
         targetIdx = i;
@@ -187,8 +190,8 @@ bool writeFile(const char* name, const char* content) {
 
     if (targetIdx != -1) {
       FileEntry newFile;
-      memset(newFile.name, 0, NAME_SIZE);
-      strncpy(newFile.name, name, NAME_SIZE - 1);
+      memset(newFile.name, 0, FSNAME_SIZE);
+      strncpy(newFile.name, name, FSNAME_SIZE - 1);
       
       // rewrite file, if same size or less mantain address
       if (temp.active && strcmp(temp.name, name) == 0 && size <= temp.fileSize) {
@@ -216,7 +219,7 @@ bool writeFile(const char* name, const char* content) {
   bool readFile(const char* name, char* buffer, int bufferSize) {
     if (!isFormatted()) return false;
 
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < FSMAX_FILES; i++) {
       FileEntry entry;
       EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
 
@@ -234,7 +237,7 @@ bool writeFile(const char* name, const char* content) {
   }
 
 bool deleteFile(const char* name) {
-  for (int i = 0; i < MAX_FILES; i++) {
+  for (int i = 0; i < FSMAX_FILES; i++) {
     FileEntry entry;
     EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
     
@@ -248,10 +251,10 @@ bool deleteFile(const char* name) {
   return false;
 }
 
- void listAllFiles() {
+ void listAllFiles(void) {
     if (!isFormatted()) return;
     Serial.println(F("\n--- FS LIST ---"));
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < FSMAX_FILES; i++) {
       FileEntry entry;
       EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
       if (entry.active) {
@@ -262,7 +265,7 @@ bool deleteFile(const char* name) {
   }
 
   bool exists(const char* name) {
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < FSMAX_FILES; i++) {
       FileEntry entry;
       EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
       
@@ -274,7 +277,7 @@ bool deleteFile(const char* name) {
     return false;
   }
 
-  int freeSpace() {
+  int freeSpace(void) {
     if (!isFormatted()) return 0;
     
     int free = EEPROM_SIZE - nextAddress;  
@@ -283,9 +286,9 @@ bool deleteFile(const char* name) {
   }
 
   //get free splots
-  int freeSlots() {
+  int freeSlots(void) {
     int count = 0;
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < FSMAX_FILES; i++) {
       FileEntry entry;
       EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
       if (!entry.active) count++;
@@ -304,11 +307,11 @@ bool deleteFile(const char* name) {
   }
 
 //get disable slots count
-int getFreeSlotsCount() {
+int getFreeSlotsCount(void) {
   if (!isFormatted()) return 0;
   
   int count = 0;
-  for (int i = 0; i < MAX_FILES; i++) {
+  for (int i = 0; i < FSMAX_FILES; i++) {
     FileEntry entry;
     EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
     
@@ -319,12 +322,12 @@ int getFreeSlotsCount() {
   return count;
 }
 
-void listFreeSlotIndexes() {
+void listFreeSlotIndexes(void) {
   if (!isFormatted()) return;
   
   Serial.print(F("Free Slots: "));
   bool first = true;
-  for (int i = 0; i < MAX_FILES; i++) {
+  for (int i = 0; i < FSMAX_FILES; i++) {
     FileEntry entry;
     EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
     
@@ -346,7 +349,7 @@ bool isDirectory(const char* path) {
     searchPath += "/";
   }
 
-  for (int i = 0; i < MAX_FILES; i++) {
+  for (int i = 0; i < FSMAX_FILES; i++) {
     FileEntry entry;
     EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
 
@@ -359,7 +362,7 @@ bool isDirectory(const char* path) {
   return false;
 }
 
-void hexdump() {
+void hexdump(void) {
   
   Serial.println(F("\n--- EEPROM HEXDUMP ---"));
   // Serial.println(F("Addr      0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F  |ASCII|"));
