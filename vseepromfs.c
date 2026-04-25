@@ -2,9 +2,9 @@
 Some Simple FileSytem Library to work with internal EEPROM's
 Supports Format,Read,Write,Delete,List Files
 All directory are virtual and part of filename.
-The space will be divided in slots, if some file was deleted, that slot becomes disabled, then if new file can get it the free space the slot is reused.
+The space will be divided in slots, if some file was deleted, that slot becomes disabled, then if new file can get in the free space the slot is reused.
 
-VSEEPROMFS V0.2
+VSEEPROMFS V0.3
 */
 #include <Arduino.h>
 
@@ -52,7 +52,7 @@ public:
     
      EEPROM.write(MAGIC_BYTE_ADDR, MAGIC_VALUE);//save signature after format
      nextAddress = TABLE_START + (sizeof(FileEntry) * MAX_FILES);
-     Serial.println(F("EEPROM Formated."));
+     Serial.println(F("EEPROM Formated!"));
   }
 
 bool writeFile(const char* name, const char* content) {
@@ -71,7 +71,7 @@ bool writeFile(const char* name, const char* content) {
     if (!entry.active && entry.fileSize >= sizeNeeded && entry.startAddress > 0) {
       slotToUse = i;
       targetAddr = entry.startAddress;
-      Serial.print(F("FS: Reutilizando slot ")); Serial.println(i);
+      //Serial.print(F("Reuse slot ")); Serial.println(i);
       break; 
     }
   }
@@ -80,7 +80,7 @@ bool writeFile(const char* name, const char* content) {
   if (slotToUse == -1) {
     // check is free space exists
     if (freeSpace() < sizeNeeded) {
-      Serial.println(F("Error, no free space avaliable!"));
+      Serial.println(F("Error, no free space!"));
       return false;
     }
     
@@ -119,7 +119,7 @@ bool writeFile(const char* name, const char* content) {
   Serial.println(F("Error table Full!"));
   return false;
 }
-  
+  /*
   bool writeFileold(const char* name, const char* content) {
     if (!isFormatted()) return false;
     
@@ -164,7 +164,7 @@ bool writeFile(const char* name, const char* content) {
     }
     return false;
   }
-
+*/
   bool readFile(const char* name, char* buffer, int bufferSize) {
     if (!isFormatted()) return false;
 
@@ -302,7 +302,7 @@ bool isDirectory(const char* path) {
     FileEntry entry;
     EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
 
-    // Se o ficheiro está ativo e o nome começa com o path
+    // if active and starts with path
     if (entry.active && strstr(entry.name, searchPath.c_str()) == entry.name) {
       return true;
     }
