@@ -289,4 +289,26 @@ void listFreeSlotIndexes() {
   Serial.println();
 }
 
+bool isDirectory(const char* path) {
+  if (!isFormatted()) return false;
+
+  // search is path end with '/'
+  String searchPath = String(path);
+  if (!searchPath.endsWith("/")) {
+    searchPath += "/";
+  }
+
+  for (int i = 0; i < MAX_FILES; i++) {
+    FileEntry entry;
+    EEPROM.get(TABLE_START + (i * sizeof(FileEntry)), entry);
+
+    // Se o ficheiro está ativo e o nome começa com o path
+    if (entry.active && strstr(entry.name, searchPath.c_str()) == entry.name) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 };
