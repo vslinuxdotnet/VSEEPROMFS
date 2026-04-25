@@ -7,12 +7,20 @@ The space will be divided in slots, if some file was deleted, that slot becomes 
 VSEEPROMFS V0.3
 */
 #include <Arduino.h>
+#include <EEPROM.h>
 
 #define MAX_FILES 10 //max files
 #define NAME_SIZE 16 //max file name
 #define EEPROM_SIZE 1024 //max size of internal eeprom
 #define MAGIC_BYTE_ADDR 0 //address if magic value
 #define MAGIC_VALUE 0x55 //format ok magic value
+
+struct FileEntry {
+  char name[NAME_SIZE];
+  int startAddress;
+  int fileSize;
+  bool active;
+};
 
 class VSEEPROMFS {
   
